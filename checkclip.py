@@ -22,32 +22,33 @@ def fail(msg):
     exit(1)
 
 # Read a tone from a wave file.
-def read_wave(filename):
+def read_reference(filename):
+    fref = soundfile.SoundFile(filename)
+    data = fref.read(dtype=np.int16)
+    return (fref, data)
+
+def compare_test(fref, filename):
     with soundfile.SoundFile(filename) as f:
-        if f.format != 'WAV':
-            fail(f"unknown file format {f.format}")
-        if f.subtype != 'PCM_16':
+        if f.format != fref.format:
+            fail(f"wrong file format {f.format}")
+        if f.subtype != fref.subtype:
             fail(f"wrong file subtype {f.subtype}")
-        if f.channels != 1:
-            fail(f"{f.channels} channels")
-        if f.samplerate != 48000:
-            fail(f"sample rate {f.samplerate}")
-        if f.frames != 48000:
-            print(f"warning: {f.frames} frames")
-            if not approx(f.frames, 48000, 10):
-                fail(f"sample length {f.frames / 48000} secs")
+        if f.channels != fref.channels:
+            fail(f"wrong number {f.channels} of channels")
+        if f.samplerate != fref.samplerate:
+            fail(f"wrong sample rate {f.samplerate}")
         data = f.read(dtype=np.int16)
+        if f.frames != fref.frames:
+            dframe = f.frames - fref.frames
+            print(f"warning: length {dframe:+} frames")
+            if not approx(f.frames, fref.frames, 100):
+                tframe = f.frames / f.samplerate
+                fail(f"wrong clip length {tframe} secs")
+            data = np.resize(data, fref.frames)
     return data
 
-wav = read_wave(args.test)
-nwav = len(wav)
-refwav = read_wave(args.ref)
-nrefwav = len(refwav)
-assert nrefwav == 48000
-if nwav < nrefwav:
-    refwav = refwav[:nrefwav]
-elif nwav > nrefwav:
-    wav = wav[:nrefwav]
+fref, refwav = read_reference(args.ref)
+wav = compare_test(fref, args.test)
 
 signal = (wav.astype(np.float64) - refwav.astype(np.float64)) / 32768.0
 rms = np.sqrt(np.mean(np.square(signal)))
